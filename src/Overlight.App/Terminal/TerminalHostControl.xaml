@@ -6,11 +6,12 @@
     <Grid Background="#0C0C0C">
         <!--
             The <WebView2/> element is Microsoft.UI.Xaml.Controls.WebView2,
-            bundled with WindowsAppSDK. The CoreWebView2.* API used in the
-            code-behind needs the Microsoft.Web.WebView2 NuGet package,
-            referenced in Overlight.App.csproj. Also requires the WebView2
-            Runtime present on the machine (preinstalled on Windows 11;
-            redistributable on Windows 10) — verify on a real install.
+            and the CoreWebView2.* API used in the code-behind, both come
+            from WindowsAppSDK (see the comment in Overlight.App.csproj —
+            do NOT add the separate Microsoft.Web.WebView2 NuGet package,
+            it collides with the copy WindowsAppSDK already ships). Also
+            requires the WebView2 Runtime present on the machine
+            (preinstalled on Windows 11; redistributable on Windows 10).
         -->
         <WebView2 x:Name="Browser" />
     </Grid>

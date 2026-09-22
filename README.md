@@ -90,9 +90,12 @@ whatever's actually running in it.
 - Assumes UTF-8 in both directions between ConPTY and the shell —
   matches how Windows Terminal talks to ConPTY, but worth confirming
   against classic cmd.exe codepage behavior on a real machine.
-- The `Microsoft.Web.WebView2` package version pinned in the `.csproj`
-  hasn't been checked for compatibility with the pinned
-  `Microsoft.WindowsAppSDK` version — `dotnet restore` may need it bumped.
+- There is deliberately no `Microsoft.Web.WebView2` NuGet reference in
+  the `.csproj` — WindowsAppSDK already bundles that API surface inside
+  `Microsoft.WinUI.dll` for the `<WebView2/>` control, and adding the
+  separate package causes a `CS0433` type collision (found this the
+  hard way on the first real build; see the comment in
+  `Overlight.App.csproj`).
 
 ## Building
 

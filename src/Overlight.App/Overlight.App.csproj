@@ -20,13 +20,15 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.5.240311000" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.3233" />
     <!--
-      The <WebView2/> XAML control itself ships with WindowsAppSDK
-      (Microsoft.UI.Xaml.Controls.WebView2), but the CoreWebView2.* API
-      surface used in TerminalHostControl.xaml.cs comes from this
-      package. Version unverified against the WindowsAppSDK version
-      above — pin to whatever `dotnet restore` resolves as compatible.
+      Deliberately NOT referencing Microsoft.Web.WebView2 here.
+      Microsoft.WindowsAppSDK already bundles its own copy of the
+      WebView2 Core API surface inside Microsoft.WinUI.dll (needed
+      internally for the <WebView2/> XAML control), so adding that
+      package too gives two copies of CoreWebView2 and friends and
+      fails with CS0433 "exists in both ... Microsoft.WinUI". The
+      Microsoft.Web.WebView2.Core types TerminalHostControl.xaml.cs
+      uses come from WindowsAppSDK above, no separate package needed.
     -->
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2592.51" />
   </ItemGroup>
 
   <ItemGroup>
