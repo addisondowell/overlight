@@ -9,13 +9,14 @@ namespace Overlight.App.Terminal.Models;
 /// </summary>
 public sealed class ClaudeAccount
 {
-    public Guid Id { get; init; } = Guid.NewGuid();
-
-    // Not `required`: AccountRow (which wraps this) is bound via x:Bind,
-    // and the generated XamlTypeInfo.g.cs constructs+assigns properties
-    // in a way `required` rejects (CS9035/CS8852) — see AccountRow.cs.
-    public string Label { get; init; } = string.Empty;
-
-    public string? Note { get; init; }
-    public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.Now;
+    // Plain get/set on all four, not `init`: AccountRow (which wraps
+    // this) is bound via x:Bind, and the generated XamlTypeInfo.g.cs
+    // assigns properties as separate statements after construction —
+    // `init` rejects that (CS8852) regardless of `required` — see the
+    // comment in AccountRow.cs. Every call site still only ever sets
+    // these once, via an object initializer right after `new`.
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Label { get; set; } = string.Empty;
+    public string? Note { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
 }
