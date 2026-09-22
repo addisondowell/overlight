@@ -4,7 +4,6 @@ using Microsoft.UI.Xaml.Hosting;
 using Overlight.App.Presentation;
 using Overlight.App.ReadLayer;
 using Overlight.App.Terminal;
-using WinRT.Interop;
 
 namespace Overlight.App;
 
@@ -20,11 +19,19 @@ public sealed partial class MainWindow : Window
     private readonly PowerModeMonitor _powerModeMonitor = new();
     private AmbientCompositor? _ambientCompositor;
     private OcclusionMonitor? _occlusionMonitor;
+    private TerminalWindow? _terminalWindow;
 
     public MainWindow()
     {
         InitializeComponent();
         Activated += OnActivated;
+        Closed += OnClosed;
+    }
+
+    private void OnClosed(object sender, WindowEventArgs args)
+    {
+        _occlusionMonitor?.Dispose();
+        _powerModeMonitor.Dispose();
     }
 
     private async void OnActivated(object sender, WindowActivatedEventArgs args)
@@ -32,10 +39,8 @@ public sealed partial class MainWindow : Window
         // Only wire up once — Activated fires on every focus change.
         Activated -= OnActivated;
 
-        nint hwnd = WindowNative.GetWindowHandle(this);
-
-        _occlusionMonitor = new OcclusionMonitor(hwnd);
-        _occlusionMonitor.CloakedChanged += cloaked => _ambientCompositor?.SetOccluded(cloaked);
+        _occlusionMonitor = new OcclusionMonitor(this);
+        _occlusionMonitor.OccludedChanged += occluded => _ambientCompositor?.SetOccluded(occluded);
         _occlusionMonitor.Start();
 
         _powerModeMonitor.ModeChanged += mode =>
@@ -62,7 +67,16 @@ public sealed partial class MainWindow : Window
 
     private void OnOpenTerminalClicked(object sender, RoutedEventArgs e)
     {
-        var terminal = new TerminalWindow();
-        terminal.Activate();
+        // Reuse one terminal window rather than spawning a new one per
+        // click — each carries a real WebView2 (Chromium) instance and a
+        // spawned shell process, so piling up duplicates on repeat
+        // clicks was a real, avoidable cost.
+        if (_terminalWindow is null)
+        {
+            _terminalWindow = new TerminalWindow();
+            _terminalWindow.Closed += (_, _) => _terminalWindow = null;
+        }
+
+        _terminalWindow.Activate();
     }
 }
