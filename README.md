@@ -34,6 +34,36 @@ verified against a real Windows install before they can be trusted:
   registry before/after toggling Focus Assist from Settings on a real
   machine before this is filled in.
 
+## Terminal simulator
+
+A second window (`Terminal/TerminalWindow.xaml`, opened via the "Open
+Terminal" button on the main overlay) adds two things that sit outside
+the read/present/suppress model above — this is interactive automation
+and account bookkeeping, not passive representation of desktop state:
+
+- **Timed loops** — schedule a prompt to fire on an interval (`loop add
+  5m check inbox`), shown as cards with a progress-bar countdown to the
+  next trigger. `Terminal/Services/LoopScheduler.cs` drives every loop's
+  countdown off one shared 1-second timer. **Not wired to a real Claude
+  call yet** — `Terminal/Services/IPromptExecutor.cs` is the seam for
+  that, currently bound to `SimulatedPromptExecutor`, which only echoes
+  `[simulated] would send to Claude: ...` into the transcript. Wiring a
+  real executor (Claude Code CLI? Messages API? a claude.ai session?) is
+  an open decision — each has different auth and account implications.
+- **Accounts** — `Terminal/Services/AccountManager.cs` holds a list of
+  locally-defined labels (not authenticated logins) and which one is
+  "active," persisted to `%LOCALAPPDATA%\Overlight\accounts.json`. The
+  terminal header always shows the active label; the Accounts panel
+  lists all of them and switches on click. This is bookkeeping for which
+  context you're conceptually working in — it does not authenticate
+  against any real Claude account. If the intent is actually switching
+  between authenticated claude.ai/Claude Code sessions, that needs a real
+  design pass before this can back it.
+
+Both panels are also drivable from the command line at the bottom of the
+terminal (`help` lists all commands) — the panels and the command line
+operate on the same underlying state.
+
 ## Building
 
 This is a WinUI 3 (Windows App SDK) project and only builds on Windows.
@@ -53,4 +83,5 @@ src/Overlight.App/
   ReadLayer/                 — window list, notification list (read-only)
   Presentation/               — overlay surface, ambient motion, throttling
   Suppression/                 — the one allowed mutation: Focus Assist
+  Terminal/                    — timed-loop scheduler + account switcher
 ```

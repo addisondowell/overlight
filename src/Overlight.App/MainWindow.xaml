@@ -12,6 +12,7 @@
             <TextBlock x:Name="WindowCountText"
                        Opacity="0.6"
                        FontSize="14" />
+            <Button Content="Open Terminal" Click="OnOpenTerminalClicked" HorizontalAlignment="Center" Margin="0,8,0,0" />
         </StackPanel>
     </Grid>
 </Window>

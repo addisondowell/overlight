@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Hosting;
 using Overlight.App.Presentation;
 using Overlight.App.ReadLayer;
+using Overlight.App.Terminal;
 using WinRT.Interop;
 
 namespace Overlight.App;
@@ -57,5 +58,11 @@ public sealed partial class MainWindow : Window
     {
         DesktopState state = await _stateReader.CaptureAsync();
         WindowCountText.Text = $"{state.Windows.Count} visible windows · {state.Notifications.Count} notifications";
+    }
+
+    private void OnOpenTerminalClicked(object sender, RoutedEventArgs e)
+    {
+        var terminal = new TerminalWindow();
+        terminal.Activate();
     }
 }
