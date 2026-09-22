@@ -7,6 +7,16 @@
     <RootNamespace>Overlight.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
+    <!--
+      Without this, `dotnet run`/`dotnet build` invoked directly on this
+      .csproj (bypassing Overlight.sln's Debug|x64 configuration mapping)
+      default MSBuild's Platform to AnyCPU, which
+      WindowsAppSDKSelfContained explicitly rejects ("The platform
+      'AnyCPU' is not supported for Self Contained mode"). Pinning it
+      here makes `dotnet run --project src\Overlight.App\Overlight.App.csproj`
+      work without needing an explicit -p:Platform=x64 every time.
+    -->
+    <Platform>x64</Platform>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
