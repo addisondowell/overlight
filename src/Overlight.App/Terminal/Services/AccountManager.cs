@@ -58,10 +58,7 @@ public sealed class AccountManager
 
     public bool SwitchTo(string labelOrShortId)
     {
-        ClaudeAccount? match = Accounts.FirstOrDefault(a =>
-            a.Label.Equals(labelOrShortId, StringComparison.OrdinalIgnoreCase)
-            || a.Id.ToString("N").StartsWith(labelOrShortId, StringComparison.OrdinalIgnoreCase));
-
+        ClaudeAccount? match = Find(labelOrShortId);
         if (match is null)
         {
             return false;
@@ -69,6 +66,53 @@ public sealed class AccountManager
 
         ActiveAccount = match;
         Save();
+        return true;
+    }
+
+    public ClaudeAccount? Find(string labelOrShortId) => Accounts.FirstOrDefault(a =>
+        a.Label.Equals(labelOrShortId, StringComparison.OrdinalIgnoreCase)
+        || a.Id.ToString("N").StartsWith(labelOrShortId, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Sets one environment-variable override for an account's spawned
+    /// shell (see ClaudeAccount.EnvironmentOverrides). If this account is
+    /// currently active, raises ActiveAccountChanged so an open terminal
+    /// restarts its shell with the new value applied immediately —
+    /// setting the override should not require closing and reopening the
+    /// terminal window to take effect.
+    /// </summary>
+    public bool SetEnvironmentOverride(string labelOrShortId, string key, string value)
+    {
+        ClaudeAccount? account = Find(labelOrShortId);
+        if (account is null)
+        {
+            return false;
+        }
+
+        account.EnvironmentOverrides[key] = value;
+        Save();
+        if (account == ActiveAccount)
+        {
+            ActiveAccountChanged?.Invoke(account);
+        }
+
+        return true;
+    }
+
+    public bool UnsetEnvironmentOverride(string labelOrShortId, string key)
+    {
+        ClaudeAccount? account = Find(labelOrShortId);
+        if (account is null || !account.EnvironmentOverrides.Remove(key))
+        {
+            return false;
+        }
+
+        Save();
+        if (account == ActiveAccount)
+        {
+            ActiveAccountChanged?.Invoke(account);
+        }
+
         return true;
     }
 

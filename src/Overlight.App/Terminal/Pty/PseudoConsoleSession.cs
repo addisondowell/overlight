@@ -8,10 +8,10 @@ namespace Overlight.App.Terminal.Pty;
 /// <summary>
 /// Spawns a real shell attached to a ConPTY pseudo-console and exposes
 /// its raw output as a byte stream. This is the thing that makes
-/// TerminalGridView an actual terminal emulator rather than a themed
+/// TerminalHostControl an actual terminal emulator rather than a themed
 /// text box: whatever the shell would print to a real console comes
 /// through OutputReceived byte-for-byte, escape sequences included, for
-/// Vt/VtParser to interpret.
+/// xterm.js to interpret.
 ///
 /// Assumes UTF-8 in both directions, matching how Windows Terminal talks
 /// to ConPTY — verify against a real shell (PowerShell vs. classic cmd
@@ -19,6 +19,8 @@ namespace Overlight.App.Terminal.Pty;
 /// </summary>
 public sealed class PseudoConsoleSession : IDisposable
 {
+    private const int CREATE_UNICODE_ENVIRONMENT = 0x00000400;
+
     private IntPtr _pseudoConsoleHandle;
     private IntPtr _attributeListHandle;
     private IntPtr _processHandle;
@@ -31,11 +33,30 @@ public sealed class PseudoConsoleSession : IDisposable
     public event Action<ReadOnlyMemory<byte>>? OutputReceived;
     public event Action<int>? ProcessExited;
 
-    public bool Start(string commandLine, int columns, int rows)
+    /// <summary>
+    /// Set on the most recent failed step of <see cref="Start"/>, with
+    /// enough detail (including the Win32 error code) to actually
+    /// diagnose a failure instead of a bare "didn't work" — surfaced by
+    /// TerminalHostControl straight into the terminal pane.
+    /// </summary>
+    public string? LastError { get; private set; }
+
+    /// <summary>
+    /// Starts the shell. <paramref name="environmentOverrides"/> is
+    /// layered on top of this process's own inherited environment
+    /// (which the child would otherwise get verbatim, including
+    /// whatever credentials/config paths are already in scope) — this is
+    /// the actual mechanism behind per-account isolation in the
+    /// Accounts panel; see Terminal/Services/AccountManager.cs.
+    /// </summary>
+    public bool Start(
+        string commandLine, int columns, int rows,
+        IReadOnlyDictionary<string, string>? environmentOverrides = null)
     {
         if (!CreatePipe(out SafeFileHandle inputReadSide, out SafeFileHandle inputWriteSide, IntPtr.Zero, 0)
             || !CreatePipe(out SafeFileHandle outputReadSide, out SafeFileHandle outputWriteSide, IntPtr.Zero, 0))
         {
+            LastError = $"CreatePipe failed (Win32 error {Marshal.GetLastWin32Error()})";
             return false;
         }
 
@@ -43,6 +64,7 @@ public sealed class PseudoConsoleSession : IDisposable
         int hr = CreatePseudoConsole(size, inputReadSide, outputWriteSide, 0, out _pseudoConsoleHandle);
         if (hr != 0)
         {
+            LastError = $"CreatePseudoConsole failed (HRESULT 0x{hr:X8})";
             return false;
         }
 
@@ -54,8 +76,9 @@ public sealed class PseudoConsoleSession : IDisposable
         _inputStream = new FileStream(inputWriteSide, FileAccess.Write);
         _outputStream = new FileStream(outputReadSide, FileAccess.Read);
 
-        if (!TryCreateAttachedProcess(commandLine))
+        if (!TryCreateAttachedProcess(commandLine, environmentOverrides))
         {
+            // LastError already set by TryCreateAttachedProcess.
             Dispose();
             return false;
         }
@@ -66,12 +89,14 @@ public sealed class PseudoConsoleSession : IDisposable
         return true;
     }
 
-    private bool TryCreateAttachedProcess(string commandLine)
+    private bool TryCreateAttachedProcess(
+        string commandLine, IReadOnlyDictionary<string, string>? environmentOverrides)
     {
         IntPtr lpSize = IntPtr.Zero;
         InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref lpSize);
         if (lpSize == IntPtr.Zero)
         {
+            LastError = "InitializeProcThreadAttributeList size query returned zero";
             return false;
         }
 
@@ -79,6 +104,7 @@ public sealed class PseudoConsoleSession : IDisposable
 
         if (!InitializeProcThreadAttributeList(_attributeListHandle, 1, 0, ref lpSize))
         {
+            LastError = $"InitializeProcThreadAttributeList failed (Win32 error {Marshal.GetLastWin32Error()})";
             return false;
         }
 
@@ -91,6 +117,7 @@ public sealed class PseudoConsoleSession : IDisposable
                 IntPtr.Zero,
                 IntPtr.Zero))
         {
+            LastError = $"UpdateProcThreadAttribute failed (Win32 error {Marshal.GetLastWin32Error()})";
             return false;
         }
 
@@ -101,26 +128,78 @@ public sealed class PseudoConsoleSession : IDisposable
         };
         startupInfo.StartupInfo.cb = Marshal.SizeOf<STARTUPINFOEX>();
 
-        bool created = CreateProcess(
-            null,
-            new StringBuilder(commandLine),
-            IntPtr.Zero,
-            IntPtr.Zero,
-            false,
-            (uint)EXTENDED_STARTUPINFO_PRESENT,
-            IntPtr.Zero,
-            null,
-            ref startupInfo,
-            out PROCESS_INFORMATION processInfo);
+        IntPtr environmentBlock = BuildEnvironmentBlock(environmentOverrides);
 
-        if (!created)
+        bool created;
+        try
         {
-            return false;
+            created = CreateProcess(
+                null,
+                new StringBuilder(commandLine),
+                IntPtr.Zero,
+                IntPtr.Zero,
+                false,
+                (uint)EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+                environmentBlock,
+                null,
+                ref startupInfo,
+                out PROCESS_INFORMATION processInfo);
+
+            if (!created)
+            {
+                LastError = $"CreateProcess('{commandLine}') failed (Win32 error {Marshal.GetLastWin32Error()})";
+                return false;
+            }
+
+            _processHandle = processInfo.hProcess;
+            CloseHandle(processInfo.hThread);
+            return true;
+        }
+        finally
+        {
+            if (environmentBlock != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(environmentBlock);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds a Win32 environment block (KEY=VALUE\0 pairs, double-null
+    /// terminated) starting from this process's own inherited
+    /// environment with <paramref name="overrides"/> layered on top. A
+    /// null/empty overrides set still returns a real block (rather than
+    /// IntPtr.Zero / "inherit verbatim") so behavior is identical either
+    /// way — only the override step differs.
+    /// </summary>
+    private static IntPtr BuildEnvironmentBlock(IReadOnlyDictionary<string, string>? overrides)
+    {
+        var env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            if (entry.Key is string key && entry.Value is string value)
+            {
+                env[key] = value;
+            }
         }
 
-        _processHandle = processInfo.hProcess;
-        CloseHandle(processInfo.hThread);
-        return true;
+        if (overrides is not null)
+        {
+            foreach ((string key, string value) in overrides)
+            {
+                env[key] = value;
+            }
+        }
+
+        var block = new StringBuilder();
+        foreach (KeyValuePair<string, string> pair in env.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            block.Append(pair.Key).Append('=').Append(pair.Value).Append('\0');
+        }
+        block.Append('\0');
+
+        return Marshal.StringToHGlobalUni(block.ToString());
     }
 
     public void WriteInput(ReadOnlySpan<byte> data)

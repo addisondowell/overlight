@@ -42,6 +42,9 @@ public static class CommandInterpreter
         "account add <label> [note]",
         "account switch <label-or-id>",
         "account list",
+        "account setenv <label-or-id> <KEY>=<VALUE>   — isolate this account's shell env",
+        "account unsetenv <label-or-id> <KEY>",
+        "account showenv <label-or-id>  — values that look like secrets are redacted",
         "whoami                         — which account is active",
         "clear                          — handled by the input box, clears the transcript",
     };
@@ -142,17 +145,123 @@ public static class CommandInterpreter
                 }
 
                 return TerminalServices.AccountManager.Accounts
-                    .Select(a => $"{(a == TerminalServices.AccountManager.ActiveAccount ? "*" : " ")} {a.Label}" + (a.Note is null ? "" : $"  — {a.Note}"))
+                    .Select(a =>
+                    {
+                        string marker = a == TerminalServices.AccountManager.ActiveAccount ? "*" : " ";
+                        string note = a.Note is null ? "" : $"  — {a.Note}";
+                        string envCount = a.EnvironmentOverrides.Count > 0
+                            ? $"  [{a.EnvironmentOverrides.Count} env override(s)]"
+                            : "";
+                        return $"{marker} {a.Label}{note}{envCount}";
+                    })
                     .ToList();
+
+            case "setenv":
+                return SetEnv(args);
+
+            case "unsetenv":
+                return UnsetEnv(args);
+
+            case "showenv":
+                return ShowEnv(args);
 
             default:
                 return new[] { $"unknown account subcommand: {sub}" };
         }
     }
 
+    private static IReadOnlyList<string> SetEnv(string args)
+    {
+        string[] parts = args.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2 || !parts[1].Contains('='))
+        {
+            return new[] { "usage: account setenv <label-or-id> <KEY>=<VALUE>" };
+        }
+
+        string labelOrId = parts[0];
+        int eq = parts[1].IndexOf('=');
+        string key = parts[1][..eq].Trim();
+        string value = parts[1][(eq + 1)..];
+
+        if (key.Length == 0)
+        {
+            return new[] { "usage: account setenv <label-or-id> <KEY>=<VALUE>" };
+        }
+
+        return TerminalServices.AccountManager.SetEnvironmentOverride(labelOrId, key, value)
+            ? new[] { $"set {key} for account '{labelOrId}'" + (IsActive(labelOrId) ? " (shell restarting now)" : "") }
+            : new[] { $"no account matching '{labelOrId}'" };
+    }
+
+    private static IReadOnlyList<string> UnsetEnv(string args)
+    {
+        string[] parts = args.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            return new[] { "usage: account unsetenv <label-or-id> <KEY>" };
+        }
+
+        string labelOrId = parts[0];
+        string key = parts[1].Trim();
+
+        return TerminalServices.AccountManager.UnsetEnvironmentOverride(labelOrId, key)
+            ? new[] { $"unset {key} for account '{labelOrId}'" + (IsActive(labelOrId) ? " (shell restarting now)" : "") }
+            : new[] { $"no account matching '{labelOrId}', or it had no override for '{key}'" };
+    }
+
+    private static IReadOnlyList<string> ShowEnv(string args)
+    {
+        if (args.Length == 0)
+        {
+            return new[] { "usage: account showenv <label-or-id>" };
+        }
+
+        ClaudeAccount? account = TerminalServices.AccountManager.Find(args);
+        if (account is null)
+        {
+            return new[] { $"no account matching '{args}'" };
+        }
+
+        if (account.EnvironmentOverrides.Count == 0)
+        {
+            return new[] { $"'{account.Label}' has no environment overrides — its shell inherits Overlight's own environment as-is" };
+        }
+
+        return account.EnvironmentOverrides
+            .Select(kv => $"{kv.Key}={RedactIfSecret(kv.Key, kv.Value)}")
+            .ToList();
+    }
+
+    private static bool IsActive(string labelOrId) =>
+        TerminalServices.AccountManager.Find(labelOrId) == TerminalServices.AccountManager.ActiveAccount;
+
+    private static readonly string[] SecretMarkers = { "KEY", "TOKEN", "SECRET", "PASSWORD", "PWD" };
+
+    private static string RedactIfSecret(string key, string value)
+    {
+        bool looksSecret = SecretMarkers.Any(marker =>
+            key.Contains(marker, StringComparison.OrdinalIgnoreCase));
+
+        if (!looksSecret || value.Length == 0)
+        {
+            return looksSecret ? "(redacted)" : value;
+        }
+
+        return value.Length <= 4 ? "****" : $"{value[..2]}…{value[^2..]}";
+    }
+
     private static IReadOnlyList<string> WhoAmI()
     {
         ClaudeAccount? active = TerminalServices.AccountManager.ActiveAccount;
-        return new[] { active is null ? "no active account set" : $"working in: {active.Label}" };
+        if (active is null)
+        {
+            return new[] { "no active account set" };
+        }
+
+        string envNote = active.EnvironmentOverrides.Count > 0
+            ? $" ({active.EnvironmentOverrides.Count} env override(s) applied to its shell)"
+            : " (no env overrides — its shell inherits Overlight's own environment as-is)";
+
+        return new[] { $"working in: {active.Label}{envNote}" };
     }
 }

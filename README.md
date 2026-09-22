@@ -20,10 +20,18 @@ verified against a real Windows install before they can be trusted:
   unpackaged for a fast dev loop.
 - `Presentation/PowerModeMonitor.cs` — `PowerRegisterForEffectivePowerModeNotifications`
   wrapper. Should work as written.
-- `Presentation/OcclusionMonitor.cs` — window-subclass + `WM_WINDOWPOSCHANGED`
-  technique for push-driven cloak detection. Needs on-device verification
-  that this message reliably fires for the cloak transitions we care
-  about (virtual-desktop switch, minimize, UWP suspend).
+- `Presentation/OcclusionMonitor.cs` — throttles ambient motion off
+  `Window.VisibilityChanged`. **Changed from an earlier version** that
+  subclassed the window's raw Win32 procedure to catch DWM cloak
+  transitions directly — after a real-device report of the whole app
+  running slowly, that was the prime suspect (every window message
+  round-tripping through a managed P/Invoke callback, and real risk of
+  interfering with WinUI 3's own input/compositor pipeline), so it's
+  gone in favor of the supported, documented WinUI API. Trade-off: a
+  coarser signal (visible/not visible, not true DWM cloak state) — a
+  window fully covered by another window but not minimized still
+  animates. Should work as written; the performance risk it replaces
+  was the more important thing to remove.
 - `Presentation/AmbientCompositor.cs` — Composition-driven ambient motion,
   capped and throttled by the two monitors above. Should work as written.
 - `Suppression/FocusAssistController.cs` — reading/writing Focus Assist
@@ -69,12 +77,34 @@ own input:
   locally-defined labels (not authenticated logins) and which one is
   "active," persisted to `%LOCALAPPDATA%\Overlight\accounts.json`. The
   window header always shows the active label; the Accounts panel lists
-  all of them and switches on click. This is bookkeeping for which
-  context you're conceptually working in — it does not authenticate
-  against any real Claude account or switch which shell session you're
-  in. If the intent is actually switching between authenticated
-  claude.ai/Claude Code sessions, that needs a real design pass before
-  this can back it.
+  all of them and switches on click. This is still not authenticating
+  against any real Claude account — but it now does one real thing:
+  **`account setenv <label> KEY=VALUE` sets an environment-variable
+  override that's actually applied to that account's shell.**
+
+  This exists because of a real bug found on the first real run: a
+  shell spawned in the terminal inherits Overlight's entire process
+  environment by default, which meant whatever Claude Code credentials
+  were already in scope on the launching machine leaked into every
+  account's shell regardless of which one was "active" — the Accounts
+  panel was pure UI, it didn't touch the spawned process at all.
+  `ClaudeAccount.EnvironmentOverrides` (a plain `Dictionary<string,string>`)
+  is layered on top of the inherited environment in
+  `PseudoConsoleSession.Start`, and switching the active account (by
+  click or `account switch`) or changing its overrides (`account
+  setenv`/`unsetenv`) kills and respawns the shell with the new
+  environment applied — `TerminalHostControl.RestartShell` — since an
+  already-running process can't have its environment changed out from
+  under it. `account showenv <label>` lists current overrides with
+  anything that looks like a secret (key containing KEY/TOKEN/SECRET/
+  PASSWORD/PWD) redacted in the transcript.
+
+  Not solved: this codebase doesn't know what your actual Claude Code
+  setup keys credentials off (`ANTHROPIC_API_KEY`? a config-directory
+  path?), so there's no default/guided setup, you have to know what to
+  override yourself. And overrides are persisted to
+  `accounts.json` in **plain text** — if you put a real key in there,
+  it sits on disk unencrypted. Flagged in code comments, not hidden.
 
 Both panels are also drivable from Overlight's own command line at the
 bottom of the window (`help` lists all commands) — that input is
@@ -84,7 +114,13 @@ whatever's actually running in it.
 **Known gaps, flagged rather than silently assumed:**
 - WebView2 Runtime must be present on the machine (preinstalled on
   Windows 11; redistributable on Windows 10) — not checked/installed by
-  this code.
+  this code. Spinning up a WebView2/Chromium instance also has real,
+  non-trivial startup cost — `MainWindow` now reuses a single
+  `TerminalWindow` instance (see `OnOpenTerminalClicked`) instead of
+  creating a new one, and its own WebView2/shell, on every click, which
+  was a real avoidable cost on repeat opens; the first open per app
+  run still pays full startup cost, that's inherent to the
+  WebView2 + xterm.js approach and not something this pass fixes.
 - `%COMSPEC%` (cmd.exe) is the hardcoded default shell; no picker yet
   for PowerShell/WSL/pwsh.
 - Assumes UTF-8 in both directions between ConPTY and the shell —
@@ -96,6 +132,11 @@ whatever's actually running in it.
   separate package causes a `CS0433` type collision (found this the
   hard way on the first real build; see the comment in
   `Overlight.App.csproj`).
+- `PseudoConsoleSession.LastError` now carries a real reason (with the
+  Win32 error code) when `Start` fails, surfaced straight into the
+  terminal pane in red — added because "the terminal doesn't work" with
+  no further detail is undiagnosable from here. If it still fails
+  silently after this, that's itself worth reporting back.
 
 ## Building
 
