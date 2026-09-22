@@ -11,8 +11,13 @@ namespace Overlight.App.Terminal;
 /// </summary>
 public sealed class AccountRow
 {
-    public required ClaudeAccount Account { get; init; }
-    public required bool IsActive { get; init; }
+    // Not `required`: this type is bound via x:Bind in TerminalWindow.xaml,
+    // and the WinUI XAML compiler's generated XamlTypeInfo.g.cs constructs
+    // instances via a parameterless constructor + separate property sets,
+    // which `required` members reject (CS9035/CS8852). Every call site
+    // already sets both via an object initializer regardless.
+    public ClaudeAccount Account { get; init; } = null!;
+    public bool IsActive { get; init; }
     public string Marker => IsActive ? "●" : " ";
     public string Label => Account.Label;
 }

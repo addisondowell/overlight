@@ -10,7 +10,12 @@ namespace Overlight.App.Terminal.Models;
 public sealed class ClaudeAccount
 {
     public Guid Id { get; init; } = Guid.NewGuid();
-    public required string Label { get; init; }
+
+    // Not `required`: AccountRow (which wraps this) is bound via x:Bind,
+    // and the generated XamlTypeInfo.g.cs constructs+assigns properties
+    // in a way `required` rejects (CS9035/CS8852) — see AccountRow.cs.
+    public string Label { get; init; } = string.Empty;
+
     public string? Note { get; init; }
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.Now;
 }
