@@ -7,12 +7,15 @@ using Windows.System;
 namespace Overlight.App.Terminal;
 
 /// <summary>
-/// The terminal simulator surface: a transcript + command line on the
-/// left, and the two live panels this feature was asked for on the
-/// right — timed loops with a countdown visualizer, and an account
-/// switcher that always shows which account is active. Both panels are
-/// driven by the same state the command line mutates (TerminalServices),
-/// so clicking an account and typing "account switch" do the same thing.
+/// The terminal emulator window: a real shell (TerminalHostControl,
+/// xterm.js over ConPTY) on the left, and the two live panels this
+/// feature was asked for on the right — timed loops with a countdown
+/// visualizer, and an account switcher that always shows which account
+/// is active. The bottom bar is Overlight's own command line for
+/// loop/account commands — deliberately separate from the shell pane
+/// above it, which owns keyboard focus for whatever's actually running
+/// in it. Both panels are also drivable by clicking, driven by the same
+/// TerminalServices state the command line mutates.
 /// </summary>
 public sealed partial class TerminalWindow : Window
 {
@@ -32,7 +35,7 @@ public sealed partial class TerminalWindow : Window
     {
         InitializeComponent();
 
-        Transcript.Add("Overlight terminal simulator — type 'help' for commands.");
+        Transcript.Add("Overlight command line — type 'help'. This is separate from the shell pane above.");
         Transcript.Add("Loop prompts are not yet wired to a real Claude call (see Terminal/Services/IPromptExecutor.cs) — triggers are simulated.");
 
         RefreshAccountRows();

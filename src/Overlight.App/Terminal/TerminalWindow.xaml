@@ -10,6 +10,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Header: persistent "which account am I in" indicator -->
@@ -35,30 +36,20 @@
             </StackPanel>
         </Grid>
 
-        <!-- Body: transcript on the left, loop + account panels on the right -->
+        <!-- Body: a real terminal emulator on the left, loop + account panels on the right -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="2*" />
                 <ColumnDefinition Width="1*" MinWidth="260" />
             </Grid.ColumnDefinitions>
 
-            <ListView x:Name="TranscriptList"
-                      Grid.Column="0"
-                      Background="Transparent"
-                      BorderThickness="0"
-                      Padding="12"
-                      ItemsSource="{x:Bind Transcript}"
-                      SelectionMode="None">
-                <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{x:Bind}"
-                                   FontFamily="Cascadia Mono"
-                                   Foreground="#D4D4D4"
-                                   FontSize="13"
-                                   TextWrapping="Wrap" />
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+            <!--
+                xterm.js (vendored under WebAssets/vendor) rendering a
+                real shell spawned over ConPTY — see TerminalHostControl
+                and Pty/PseudoConsoleSession.cs. Keyboard focus here goes
+                straight to the shell, not to Overlight's own commands.
+            -->
+            <local:TerminalHostControl Grid.Column="0" />
 
             <Grid Grid.Column="1" Padding="8" Background="#111111">
                 <Grid.RowDefinitions>
@@ -134,14 +125,35 @@
             </Grid>
         </Grid>
 
-        <!-- Command line: the other way to drive loops/accounts -->
-        <Grid Grid.Row="2" Background="#161616" Padding="12,8">
+        <!-- Feedback strip for Overlight's own commands (loop/account), separate from shell output above -->
+        <ListView x:Name="TranscriptList"
+                  Grid.Row="2"
+                  Height="90"
+                  Background="#111111"
+                  BorderThickness="0,1,0,0"
+                  BorderBrush="#222222"
+                  Padding="12,6"
+                  ItemsSource="{x:Bind Transcript}"
+                  SelectionMode="None">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                    <TextBlock Text="{x:Bind}"
+                               FontFamily="Cascadia Mono"
+                               Foreground="#888888"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- Overlight's own command line: drives loops/accounts, not the shell above -->
+        <Grid Grid.Row="3" Background="#161616" Padding="12,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0"
-                       Text=">"
+                       Text="overlight&gt;"
                        Foreground="#7CFC91"
                        FontFamily="Cascadia Mono"
                        VerticalAlignment="Center"
@@ -152,7 +164,7 @@
                      BorderThickness="0"
                      Foreground="#D4D4D4"
                      FontFamily="Cascadia Mono"
-                     PlaceholderText="type 'help'"
+                     PlaceholderText="loop / account commands — type 'help'"
                      KeyDown="OnCommandInputKeyDown" />
         </Grid>
     </Grid>

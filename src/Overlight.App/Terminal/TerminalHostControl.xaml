@@ -1,0 +1,17 @@
+<UserControl
+    x:Class="Overlight.App.Terminal.TerminalHostControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Background="#0C0C0C">
+        <!--
+            The <WebView2/> element is Microsoft.UI.Xaml.Controls.WebView2,
+            bundled with WindowsAppSDK. The CoreWebView2.* API used in the
+            code-behind needs the Microsoft.Web.WebView2 NuGet package,
+            referenced in Overlight.App.csproj. Also requires the WebView2
+            Runtime present on the machine (preinstalled on Windows 11;
+            redistributable on Windows 10) — verify on a real install.
+        -->
+        <WebView2 x:Name="Browser" />
+    </Grid>
+</UserControl>

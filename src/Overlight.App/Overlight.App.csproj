@@ -19,10 +19,31 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.5.240311000" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.3233" />
+    <!--
+      The <WebView2/> XAML control itself ships with WindowsAppSDK
+      (Microsoft.UI.Xaml.Controls.WebView2), but the CoreWebView2.* API
+      surface used in TerminalHostControl.xaml.cs comes from this
+      package. Version unverified against the WindowsAppSDK version
+      above — pin to whatever `dotnet restore` resolves as compatible.
+    -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2592.51" />
   </ItemGroup>
 
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      xterm.js + xterm-addon-fit (vendored, MIT-licensed, see
+      Terminal/WebAssets/vendor/*/LICENSE) and the bridge page that
+      loads them — copied next to the built exe so
+      TerminalHostControl's SetVirtualHostNameToFolderMapping can find
+      them at AppContext.BaseDirectory/Terminal/WebAssets.
+    -->
+    <Content Include="Terminal\WebAssets\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>
